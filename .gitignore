@@ -166,3 +166,4 @@ cython_debug/
 .DS_Store
 database/chats.db
 *.csv
+cookies.txt
