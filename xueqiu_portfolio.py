@@ -6,6 +6,28 @@ from Agents import Agents,analyzer_agent
 
 load_dotenv()
 
+def unsbox(s):
+    _0x4b082b = [15, 35, 29, 24, 33, 16, 1, 38, 10, 9, 19, 31, 40, 27, 22, 23, 25, 13, 6, 11, 39, 18, 20, 8, 14, 21, 32, 26, 2, 30, 7, 4, 17, 5, 3, 28, 34, 37, 12, 36]
+    _0x4da0dc = [''] * len(_0x4b082b)
+    _0x12605e = ''
+    for _0x20a7bf in range(len(s)):
+        _0x385ee3 = s[_0x20a7bf]
+        for _0x217721 in range(len(_0x4b082b)):
+            if _0x4b082b[_0x217721] == _0x20a7bf + 1:
+                _0x4da0dc[_0x217721] = _0x385ee3
+    _0x12605e = ''.join(_0x4da0dc)
+    return _0x12605e
+ 
+def hexXor(s1, s2):
+    _0x5a5d3b = ''
+    for _0xe89588 in range(0, min(len(s1), len(s2)), 2):
+        _0x401af1 = int(s1[_0xe89588:_0xe89588+2], 16)
+        _0x105f59 = int(s2[_0xe89588:_0xe89588+2], 16)
+        _0x189e2c = hex(_0x401af1 ^ _0x105f59)[2:]
+        if len(_0x189e2c) == 1:
+            _0x189e2c = '0' + _0x189e2c
+        _0x5a5d3b += _0x189e2c
+    return _0x5a5d3b
 
 def xqStockInfo(mkt, code:str, s, h):  # 雪球股票信息
     code=code.upper()
@@ -16,7 +38,6 @@ def xqStockInfo(mkt, code:str, s, h):  # 雪球股票信息
         'market': mkt,
     }
     r = s.get("https://xueqiu.com/stock/p/search.json", headers=h, params=data)
-    print(code,r.text)
     stocks = json.loads(r.text)
     stocks = stocks['stocks']
     stock = None
@@ -28,8 +49,8 @@ def xqStockInfo(mkt, code:str, s, h):  # 雪球股票信息
 
 class xueqiuPortfolio():
     def __init__(self,mkt,portfolio_code):
+        self.trade_history = self.load_trade_history()
         self.portfolio_code = portfolio_code
-        self.trade_history = {}
         self.mkt = mkt
         self.position = dict()
         self.holdnum = 5
@@ -37,21 +58,43 @@ class xueqiuPortfolio():
         self.session.cookies.update(self.getXueqiuCookie())
         self.p_url = 'https://xueqiu.com/P/'+portfolio_code
         self.headers = {
-            "Connection": "close",
-             "user-agent": "Mozilla",
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh-CN,zh-TW;q=0.9,zh;q=0.8,en-US;q=0.7,en;q=0.6,ja;q=0.5',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Referer': 'https://xueqiu.com/',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
         }
 
+
+    def updateTrade(self,stock_symbol,trade_date:str=None):
+        if trade_date is None:
+            trade_date = datetime.now().strftime('%Y-%m-%d')
+        self.trade_history[stock_symbol]=trade_date
+        with open('trade_history.json', 'w') as f:
+            json.dump(self.trade_history, f)
+
+
+    def load_trade_history(self):
+        try:
+            with open('trade_history.json', 'r') as f:
+                return json.load(f) 
+        except FileNotFoundError:
+            return {} 
+        except json.JSONDecodeError:
+            return {}
 
     def getXueqiuCookie(self):
         sbCookie = open('cookies.txt','r').read()
         cookie_dict = {}
         for record in sbCookie.split(";"):
             key, value = record.strip().split("=", 1)
-            if 'utm' in key:
-                continue
             cookie_dict[key] = value
-        for k,v in requests.get('https://xueqiu.com',headers={'user-agent':'Mozilla'}).cookies.get_dict().items():
-            cookie_dict[k]=v
         return cookie_dict
 
     def trade(self,position_list=None):  # 调仓雪球组合
@@ -67,7 +110,6 @@ class xueqiuPortfolio():
             'comment': ""
         }
         try:
-            self.headers['Referer'] = 'https://xueqiu.com/p/update?action=holdings&symbol='+self.portfolio_code
             resp = self.session.post("https://xueqiu.com/cubes/rebalancing/create.json", headers=self.headers, data=data)
         except Exception as e:
             return {'error': '调仓失败: %s ' % e}
@@ -78,8 +120,17 @@ class xueqiuPortfolio():
     def getPosition(self):
         if len(self.position)>0:
             return self.position
-        resp = self.session.get(self.p_url, headers=self.headers).text.replace('null','0')
-        portfolio_info = json.loads(re.search(r'(?<=SNB.cubeInfo = ).*(?=;\n)', resp).group())
+        resp = self.session.get(self.p_url, headers=self.headers)
+        arg1 = re.findall("var arg1='(.*?)';",resp.text)
+        if len(arg1)==1:
+            arg1=arg1[0]
+            _0x23a392 = unsbox(arg1)
+            _0x5e8b26 = '3000176000856006061501533003690027800375'
+            arg2 = hexXor(_0x23a392, _0x5e8b26)
+            self.session.cookies.update({'acw_sc__v2': arg2})
+            resp = self.session.get(self.p_url, headers=self.headers)
+        portfolio_text = re.search(r'SNB\.cubeInfo\s*=\s*(\{.*?\})\n', resp.text, re.DOTALL).group(1)
+        portfolio_info = json.loads(portfolio_text)
         asset_balance = float(portfolio_info['net_value'])
         position = portfolio_info['view_rebalancing']
         cash = asset_balance * float(position['cash'])  # 可用资金
@@ -146,8 +197,7 @@ def extract_stock_codes(text):
 
 def run():
     max_holding = 5
-    agentPicks=['SH603038', 'SZ002693', 'SZ300489', 'SZ002456', 'SZ301326', 'SZ001696', 'SZ000099', 'SH688981', 'SZ300489', 'SH688981', 'SZ002456', 'SZ001696', 'SZ002693', 'SZ300489']
-    
+    agentPicks = []
     try:
         agentPicks = extract_stock_codes(
             Agents.run(
@@ -170,7 +220,7 @@ def run():
         for stock_code in agentPicks[:remain_position]:
             stock = xueqiuP.newPostition('cn',stock_code,xueqiuP.getPosition()['cash']/remain_position)
             position.append(stock)
-            break
+            xueqiuP.updateTrade(stock_code)
     tradeResult = xueqiuP.trade(position)
     print(tradeResult)
 
